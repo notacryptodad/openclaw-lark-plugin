@@ -12,11 +12,17 @@ A channel plugin for [OpenClaw](https://github.com/openclaw/openclaw) that enabl
 - **Image Support**: Send and receive images
 - **Auto-reconnect**: Automatic crash recovery for webhook server
 
+## Quick Start
+
+1. [Create and configure your Lark App](docs/lark-app-setup.md)
+2. [Set up Cloudflare Tunnel](docs/cloudflare-tunnel-setup.md) for webhook exposure
+3. Install and configure this plugin (see below)
+
 ## Installation
 
 1. Copy this plugin to your OpenClaw plugins directory:
    ```bash
-   cp -r openclaw-lark-plugin ~/.openclaw/plugins/lark
+   git clone https://github.com/notacryptodad/openclaw-lark-plugin.git ~/.openclaw/plugins/lark
    cd ~/.openclaw/plugins/lark
    npm install
    ```
@@ -36,8 +42,8 @@ A channel plugin for [OpenClaw](https://github.com/openclaw/openclaw) that enabl
        "lark": {
          "accounts": {
            "default": {
-             "appId": "your-lark-app-id",
-             "appSecret": "your-lark-app-secret",
+             "appId": "cli_xxxxxxxxxx",
+             "appSecret": "your-app-secret",
              "connectionMode": "webhook",
              "webhookPort": 3000,
              "domain": "lark",
@@ -49,33 +55,51 @@ A channel plugin for [OpenClaw](https://github.com/openclaw/openclaw) that enabl
    }
    ```
 
-3. Set up your Lark app in [Lark Developer Console](https://open.larksuite.com/app):
-   - Create an app and get App ID & App Secret
-   - Enable Bot capability
-   - Subscribe to `im.message.receive_v1` event
-   - Set webhook URL to your server (e.g., `https://your-domain.com`)
+3. Restart OpenClaw gateway
+
+## Documentation
+
+- **[Lark App Setup Guide](docs/lark-app-setup.md)** - Create app, configure permissions, enable events
+- **[Cloudflare Tunnel Setup](docs/cloudflare-tunnel-setup.md)** - Expose webhook endpoint securely
 
 ## Configuration Options
 
 | Option | Description | Default |
 |--------|-------------|---------|
-| `appId` | Lark App ID | - |
+| `appId` | Lark App ID (from Developer Console) | - |
 | `appSecret` | Lark App Secret | - |
 | `connectionMode` | `webhook` | `webhook` |
 | `webhookPort` | Port for webhook server | `3000` |
-| `domain` | `lark` or `feishu` | `lark` |
+| `domain` | `lark` (international) or `feishu` (China) | `lark` |
 | `dmPolicy` | `open`, `pairing`, or `allowlist` | `pairing` |
 | `groupPolicy` | `open` or `allowlist` | `open` |
+| `groupMentionGated` | Require @mention in groups | `true` |
 | `encryptKey` | Event encryption key (optional) | - |
 | `verificationToken` | Webhook verification token (optional) | - |
 
 ## Environment Variables
 
-You can also configure via environment variables:
+Alternative to config file:
 - `LARK_APP_ID`
 - `LARK_APP_SECRET`
 - `LARK_ENCRYPT_KEY`
 - `LARK_VERIFICATION_TOKEN`
+
+## Required Lark Permissions
+
+| Permission | Required | Description |
+|------------|----------|-------------|
+| `im:message` | ✅ Yes | Read and send messages |
+| `im:message:send_as_bot` | ✅ Yes | Send messages as bot |
+| `im:message.group_at_msg` | For groups | Receive @mentions |
+| `im:chat:readonly` | Recommended | Read chat info |
+
+## Required Event Subscriptions
+
+| Event | Required | Description |
+|-------|----------|-------------|
+| `im.message.receive_v1` | ✅ Yes | Receive messages |
+| `im.chat.member.bot.added_v1` | Optional | Bot added to group |
 
 ## Credits
 
@@ -85,7 +109,3 @@ You can also configure via environment variables:
 ## License
 
 MIT
-
-## Webhook Exposure
-
-Lark requires a publicly accessible HTTPS endpoint for webhooks. See [Cloudflare Tunnel Setup](docs/cloudflare-tunnel-setup.md) for a complete guide on exposing your local webhook server securely.
