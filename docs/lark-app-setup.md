@@ -41,6 +41,7 @@ Go to **Permissions & Scopes** and add these permissions:
 | `im:message` | Read and send messages | Core messaging |
 | `im:message:send_as_bot` | Send messages as bot | Reply to users |
 | `im:chat:readonly` | Read chat info | Get chat details |
+| `im:resource` | Access resources | Download images/files (required for image support) |
 
 ### Optional Permissions (for extended features)
 
@@ -48,7 +49,7 @@ Go to **Permissions & Scopes** and add these permissions:
 |------------|-------|-------------|
 | `im:message.group_at_msg` | Receive group @mentions | Bot responds when @mentioned in groups |
 | `im:chat` | Manage chats | Create/update group info |
-| `im:resource` | Access message resources | Download images/files |
+| `im:resource` | ✅ **Required for images** | Download images/files |
 | `contact:user.base:readonly` | Read user info | Get sender names |
 
 After adding permissions, click **Batch Activate** or activate individually.
