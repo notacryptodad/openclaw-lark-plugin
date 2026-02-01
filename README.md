@@ -85,3 +85,7 @@ You can also configure via environment variables:
 ## License
 
 MIT
+
+## Webhook Exposure
+
+Lark requires a publicly accessible HTTPS endpoint for webhooks. See [Cloudflare Tunnel Setup](docs/cloudflare-tunnel-setup.md) for a complete guide on exposing your local webhook server securely.
