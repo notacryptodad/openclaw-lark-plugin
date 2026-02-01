@@ -1,0 +1,11 @@
+{
+  "id": "lark",
+  "name": "Lark",
+  "description": "Lark (Larksuite) channel plugin",
+  "channels": ["lark"],
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {}
+  }
+}
