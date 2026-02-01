@@ -2,6 +2,8 @@
 
 A channel plugin for [OpenClaw](https://github.com/openclaw/openclaw) that enables integration with Lark (Larksuite/Feishu).
 
+> **Attribution**: This plugin is inspired by and adapted from [moltbot-warehouse](https://github.com/sugarforever/moltbot-warehouse) by [@sugarforever](https://github.com/sugarforever). The original Moltbot/Clawdbot plugin was ported to work with OpenClaw.
+
 ## Features
 
 - **Webhook Mode**: Receive messages via HTTP webhook
@@ -74,6 +76,11 @@ You can also configure via environment variables:
 - `LARK_APP_SECRET`
 - `LARK_ENCRYPT_KEY`
 - `LARK_VERIFICATION_TOKEN`
+
+## Credits
+
+- Original plugin: [moltbot-warehouse](https://github.com/sugarforever/moltbot-warehouse) by [@sugarforever](https://github.com/sugarforever)
+- Ported to OpenClaw by [@notacryptodad](https://github.com/notacryptodad)
 
 ## License
 
