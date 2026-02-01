@@ -9,7 +9,8 @@ A channel plugin for [OpenClaw](https://github.com/openclaw/openclaw) that enabl
 - **Webhook Mode**: Receive messages via HTTP webhook
 - **DM Support**: Direct messages with the bot
 - **Group Support**: Receive @mentions in group chats
-- **Image Support**: Send and receive images
+- **Image Support**: Send and receive images (downloaded to local cache)
+- **Rich Text Support**: Handle post messages with mixed text/images
 - **Auto-reconnect**: Automatic crash recovery for webhook server
 
 ## Quick Start
@@ -91,6 +92,7 @@ Alternative to config file:
 |------------|----------|-------------|
 | `im:message` | ✅ Yes | Read and send messages |
 | `im:message:send_as_bot` | ✅ Yes | Send messages as bot |
+| `im:resource` | ✅ Yes (for images) | Download images and files |
 | `im:message.group_at_msg` | For groups | Receive @mentions |
 | `im:chat:readonly` | Recommended | Read chat info |
 
@@ -98,8 +100,30 @@ Alternative to config file:
 
 | Event | Required | Description |
 |-------|----------|-------------|
-| `im.message.receive_v1` | ✅ Yes | Receive messages |
+| `im.message.receive_v1` | ✅ Yes | Receive messages (text, image, etc.) |
 | `im.chat.member.bot.added_v1` | Optional | Bot added to group |
+
+## Image Support
+
+### Receiving Images
+- Images sent by users are automatically downloaded to a temp cache (`/tmp/lark-images/`)
+- Supports standalone image messages and inline images in rich text (post) messages
+- Image file paths are passed to OpenClaw as attachments
+
+### Sending Images
+- Reply with an image path in the response block
+- Plugin uploads the image to Lark and sends as image message
+
+### Supported Message Types
+| Type | Receive | Send |
+|------|---------|------|
+| Text | ✅ | ✅ |
+| Image | ✅ | ✅ |
+| Rich Text (Post) | ✅ | ❌ |
+| File | ⚠️ (name only) | ❌ |
+| Audio | ⚠️ (placeholder) | ❌ |
+| Video | ⚠️ (placeholder) | ❌ |
+| Sticker | ⚠️ (placeholder) | ❌ |
 
 ## Credits
 

@@ -4,11 +4,16 @@
  * Standalone HTTP server for receiving Lark webhook callbacks.
  * Used for individual accounts that don't support WebSocket.
  * Includes automatic crash recovery.
+ * 
+ * Inspired by and adapted from:
+ * https://github.com/sugarforever/moltbot-warehouse
  */
 
 import * as http from "node:http";
 import * as crypto from "node:crypto";
 import * as fs from "node:fs";
+import * as path from "node:path";
+import * as os from "node:os";
 
 import { getLarkRuntime } from "./runtime.js";
 import type { ResolvedLarkAccount, LarkMessageEvent } from "./types.js";
@@ -16,11 +21,19 @@ import type { ResolvedLarkAccount, LarkMessageEvent } from "./types.js";
 const DEFAULT_PORT = 3000;
 const RESTART_DELAY_MS = 3000;
 const MAX_RESTART_ATTEMPTS = 5;
+const IMAGE_CACHE_DIR = path.join(os.tmpdir(), "lark-images");
 
 interface WebhookServer {
   server: http.Server | null;
   port: number;
   stop: () => void;
+}
+
+// Ensure image cache directory exists
+function ensureImageCacheDir(): void {
+  if (!fs.existsSync(IMAGE_CACHE_DIR)) {
+    fs.mkdirSync(IMAGE_CACHE_DIR, { recursive: true });
+  }
 }
 
 /**
@@ -57,32 +70,155 @@ async function parseBody(req: http.IncomingMessage): Promise<unknown> {
 }
 
 /**
- * Extract plain text from Lark message content.
+ * Download image from Lark and save to temp file.
+ * Returns the local file path or null if download fails.
  */
-function extractText(content: string, messageType: string): string {
+async function downloadImage(
+  imageKey: string,
+  messageId: string,
+  account: ResolvedLarkAccount
+): Promise<string | null> {
+  const api = getLarkRuntime();
+  
   try {
-    const parsed = JSON.parse(content);
-    if (messageType === "text") {
-      return parsed.text ?? "";
+    ensureImageCacheDir();
+    
+    const { createLarkClient } = await import("./client.js");
+    const client = createLarkClient(account);
+    
+    // Download image from Lark
+    const response = await client.im.image.get({
+      path: {
+        image_key: imageKey,
+      },
+    });
+    
+    // Get the readable stream from response
+    const stream = response.getReadableStream?.() || (response as any).data;
+    
+    if (!stream) {
+      api.logger.error(`[lark-webhook] No stream returned for image ${imageKey}`);
+      return null;
     }
-    if (messageType === "post") {
-      if (Array.isArray(parsed.content)) {
-        return parsed.content
-          .flat()
-          .filter((item: { tag: string }) => item.tag === "text")
-          .map((item: { text: string }) => item.text)
-          .join("");
-      }
-      return parsed.title ?? "";
-    }
-    return `[${messageType} message]`;
-  } catch {
-    return content;
+    
+    // Generate unique filename
+    const ext = ".png"; // Lark images are typically PNG
+    const filename = `${messageId}_${imageKey}${ext}`;
+    const filepath = path.join(IMAGE_CACHE_DIR, filename);
+    
+    // Write stream to file
+    const writeStream = fs.createWriteStream(filepath);
+    
+    await new Promise<void>((resolve, reject) => {
+      stream.pipe(writeStream);
+      stream.on("error", reject);
+      writeStream.on("finish", resolve);
+      writeStream.on("error", reject);
+    });
+    
+    api.logger.info(`[lark-webhook] Downloaded image to ${filepath}`);
+    return filepath;
+    
+  } catch (err) {
+    api.logger.error(`[lark-webhook] Failed to download image ${imageKey}: ${err}`);
+    return null;
   }
 }
 
 /**
- * Route incoming message to clawdbot handler.
+ * Extract content from Lark message.
+ * Returns { text, images } where images is an array of local file paths.
+ */
+async function extractContent(
+  content: string,
+  messageType: string,
+  messageId: string,
+  account: ResolvedLarkAccount
+): Promise<{ text: string; images: string[] }> {
+  const api = getLarkRuntime();
+  const images: string[] = [];
+  
+  try {
+    const parsed = JSON.parse(content);
+    
+    // Handle text messages
+    if (messageType === "text") {
+      return { text: parsed.text ?? "", images };
+    }
+    
+    // Handle image messages
+    if (messageType === "image") {
+      const imageKey = parsed.image_key;
+      if (imageKey) {
+        api.logger.info(`[lark-webhook] Received image: ${imageKey}`);
+        const localPath = await downloadImage(imageKey, messageId, account);
+        if (localPath) {
+          images.push(localPath);
+        }
+      }
+      return { text: "", images };
+    }
+    
+    // Handle rich text (post) messages - may contain images
+    if (messageType === "post") {
+      const textParts: string[] = [];
+      
+      if (Array.isArray(parsed.content)) {
+        for (const line of parsed.content.flat()) {
+          if (line.tag === "text") {
+            textParts.push(line.text || "");
+          } else if (line.tag === "img" && line.image_key) {
+            api.logger.info(`[lark-webhook] Received inline image: ${line.image_key}`);
+            const localPath = await downloadImage(line.image_key, messageId, account);
+            if (localPath) {
+              images.push(localPath);
+            }
+          }
+        }
+      }
+      
+      return { 
+        text: textParts.join("") || parsed.title || "", 
+        images 
+      };
+    }
+    
+    // Handle file messages
+    if (messageType === "file") {
+      return { text: `[file: ${parsed.file_name || "attachment"}]`, images };
+    }
+    
+    // Handle audio messages
+    if (messageType === "audio") {
+      return { text: "[voice message]", images };
+    }
+    
+    // Handle video messages
+    if (messageType === "media") {
+      return { text: `[video: ${parsed.file_name || "video"}]`, images };
+    }
+    
+    // Handle sticker messages
+    if (messageType === "sticker") {
+      return { text: "[sticker]", images };
+    }
+    
+    // Handle share messages (cards, links)
+    if (messageType === "share_chat" || messageType === "share_user") {
+      return { text: "[shared content]", images };
+    }
+    
+    // Unknown message type
+    return { text: `[${messageType} message]`, images };
+    
+  } catch (err) {
+    api.logger.error(`[lark-webhook] Failed to parse content: ${err}`);
+    return { text: content, images };
+  }
+}
+
+/**
+ * Route incoming message to OpenClaw handler.
  */
 async function routeMessage(
   event: LarkMessageEvent,
@@ -92,9 +228,17 @@ async function routeMessage(
   const core = api.runtime;
   const cfg = api.config;
   const { message, sender } = event;
-  const text = extractText(message.content, message.message_type);
+  
+  // Extract content including images
+  const { text, images } = await extractContent(
+    message.content, 
+    message.message_type,
+    message.message_id,
+    account
+  );
 
-  if (!text.trim()) {
+  // Skip if no text and no images
+  if (!text.trim() && images.length === 0) {
     return;
   }
 
@@ -103,7 +247,8 @@ async function routeMessage(
   const isGroup = message.chat_type === "group";
 
   api.logger.info(
-    `[lark-webhook] Message from ${senderId} in ${message.chat_type} ${chatId}`
+    `[lark-webhook] Message from ${senderId} in ${message.chat_type} ${chatId}` +
+    (images.length > 0 ? ` with ${images.length} image(s)` : "")
   );
 
   // Build Lark-specific identifiers
@@ -125,11 +270,17 @@ async function routeMessage(
     return;
   }
 
+  // Build the message body - include image description if present
+  let body = text;
+  if (images.length > 0 && !text.trim()) {
+    body = "[User sent an image]";
+  }
+
   // Finalize inbound context
   const ctxPayload = core.channel.reply.finalizeInboundContext({
-    Body: text,
-    RawBody: text,
-    CommandBody: text,
+    Body: body,
+    RawBody: body,
+    CommandBody: body,
     From: larkFrom,
     To: larkTo,
     SessionKey: route.sessionKey,
@@ -146,6 +297,8 @@ async function routeMessage(
     CommandAuthorized: true,
     OriginatingChannel: "lark",
     OriginatingTo: larkTo,
+    // Attach images if present
+    ...(images.length > 0 && { Attachments: images.map(p => ({ path: p, type: "image" })) }),
   });
 
   // Create a dispatcher that sends replies back to Lark
@@ -298,6 +451,9 @@ export function startWebhookServer(
   let server: http.Server | null = null;
   let restartAttempts = 0;
   let stopped = false;
+
+  // Ensure image cache directory exists on startup
+  ensureImageCacheDir();
 
   function createServer(): http.Server {
     const srv = http.createServer((req, res) => {
